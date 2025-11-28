@@ -155,7 +155,7 @@ elif page == "Model Comparison":
 
     st.title("📊 Model Comparison")
 
-    st.write("Below is the performance of the **3 models** you evaluated in the notebook.")
+    st.write("Below is the performance of the **3 models** we evaluated in the notebook.")
 
     # Hardcoded table from your results
     summary = pd.DataFrame([

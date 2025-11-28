@@ -19,3 +19,20 @@ future.
 
 Thanks,
     Dave Aha
+
+# Mushroom Classifier – Quick Guide
+
+## Running the App
+1. Install dependencies:
+   pip install streamlit pandas scikit-learn joblib
+2. Run the UI:
+  python -m streamlit run app.py
+
+## Using the Classifier
+- Go to the "Classifier" page in the sidebar.
+- Fill in all fields using UCI attribute codes, or load a sample.
+- Click "Predict" to see the model’s output.
+
+## EDA and About
+- "EDA Visuals" shows plots generated from the dataset.
+- "About Project" summarizes the work and group members.

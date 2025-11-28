@@ -1,33 +1,183 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import os
 
-st.set_page_config(page_title="Mushroom Classifier", layout="centered")
-st.title("Mushroom Edibility Classifier")
+# ---------------------------
+# PAGE CONFIG
+# ---------------------------
+st.set_page_config(
+    page_title="Mushroom Classifier",
+    page_icon="🍄",
+    layout="wide"
+)
 
+# Load model bundle
 bundle = joblib.load("mushroom_model.joblib")
 pipe = bundle["pipeline"]
 features = bundle["features"]
 
-# Simple UI: build a row of inputs
-st.write("Enter attributes (as in the UCI codes):")
-row = {}
-for f in features:
-    row[f] = st.text_input(f, value="")
+# ---------------------------
+# UCI ATTRIBUTE OPTIONS
+# ---------------------------
+OPTIONS = {
+    "cap-shape": ["b","c","x","f","k","s"],
+    "cap-surface": ["f","g","y","s"],
+    "cap-color": ["n","b","c","g","r","p","u","e","w","y"],
+    "bruises": ["t","f"],
+    "odor": ["a","l","c","y","f","m","n","p","s"],
+    "gill-attachment": ["a","d","f","n"],
+    "gill-spacing": ["c","w","d"],
+    "gill-size": ["b","n"],
+    "gill-color": ["k","n","b","h","g","r","o","p","u","e","w","y"],
+    "stalk-shape": ["e","t"],
+    "stalk-root": ["b","c","u","e","z","r","?"],
+    "stalk-surface-above-ring": ["f","y","k","s"],
+    "stalk-surface-below-ring": ["f","y","k","s"],
+    "stalk-color-above-ring": ["n","b","c","g","o","p","e","w","y"],
+    "stalk-color-below-ring": ["n","b","c","g","o","p","e","w","y"],
+    "veil-color": ["n","o","w","y"],
+    "ring-number": ["n","o","t"],
+    "ring-type": ["c","e","f","l","n","p","s","z"],
+    "spore-print-color": ["k","n","b","h","r","o","u","w","y"],
+    "population": ["a","c","n","s","v","y"],
+    "habitat": ["g","l","m","p","u","w","d"]
+}
 
-if st.button("Predict"):
-    X = pd.DataFrame([row])[features].astype(str)
-    yhat = pipe.predict(X)[0]
-    proba = getattr(pipe, "predict_proba", lambda X: [[None, None]])(X)[0]
-    label = "poisonous" if yhat==1 else "edible"
-    st.subheader(f"Prediction: **{label.upper()}**")
-    if proba[0] is not None:
-        st.write(f"Probabilities → edible: {proba[0]:.3f}, poisonous: {proba[1]:.3f}")
+# ---------------------------
+# SIDEBAR NAVIGATION
+# ---------------------------
+st.sidebar.title("🍄 Navigation")
+page = st.sidebar.radio("Go to:", ["Classifier", "EDA Visuals", "About Project"])
 
-st.markdown("""
-**Model card (summary)**  
-- Data: UCI Mushroom (all categorical; two binary as per variables table; `stalk-root` had '?' missing).  
-- Algorithm: pipeline chosen by 10-fold CV among KNN / DecisionTree / CategoricalNB.  
-- Caveat: Foraging safety requires human expert verification.
-""")
+# ---------------------------
+# PRESET SAMPLES
+# ---------------------------
+EDIBLE_SAMPLE = {
+    'cap-shape': 'x','cap-surface': 's','cap-color': 'w','bruises': 't',
+    'odor': 'a','gill-attachment': 'f','gill-spacing': 'c','gill-size': 'b',
+    'gill-color': 'w','stalk-shape': 'e','stalk-root': 'e',
+    'stalk-surface-above-ring': 's','stalk-surface-below-ring': 's',
+    'stalk-color-above-ring': 'w','stalk-color-below-ring': 'w',
+    'veil-color': 'w','ring-number': 'o','ring-type': 'p',
+    'spore-print-color': 'w','population': 's','habitat': 'g'
+}
+
+POISON_SAMPLE = {
+    'cap-shape': 'x','cap-surface': 's','cap-color': 'n','bruises': 't',
+    'odor': 'f','gill-attachment': 'f','gill-spacing': 'c','gill-size': 'b',
+    'gill-color': 'n','stalk-shape': 'e','stalk-root': 'e',
+    'stalk-surface-above-ring': 's','stalk-surface-below-ring': 's',
+    'stalk-color-above-ring': 'w','stalk-color-below-ring': 'w',
+    'veil-color': 'w','ring-number': 'o','ring-type': 'p',
+    'spore-print-color': 'k','population': 'a','habitat': 'u'
+}
+
+# ---------------------------
+# PAGE 1 — CLASSIFIER UI
+# ---------------------------
+if page == "Classifier":
+
+    st.title("🍄 Mushroom Edibility Classifier")
+    st.write("Enter mushroom attributes using **dropdowns**, or load an example.")
+
+    # ---- Sample buttons (must retain values after clicking Predict) ----
+    if "stored_inputs" not in st.session_state:
+        st.session_state.stored_inputs = {f: "" for f in features}
+
+    colA, colB = st.columns([1, 1])
+    if colA.button("Load Edible Example"):
+        st.session_state.stored_inputs = EDIBLE_SAMPLE.copy()
+    if colB.button("Load Poisonous Example"):
+        st.session_state.stored_inputs = POISON_SAMPLE.copy()
+
+    st.markdown("---")
+
+    # ---- Two-column dropdown layout ----
+    left, right = st.columns(2)
+
+    for idx, f in enumerate(features):
+        if idx % 2 == 0:
+            st.session_state.stored_inputs[f] = left.selectbox(
+                f"**{f}**",
+                OPTIONS[f],
+                index=OPTIONS[f].index(st.session_state.stored_inputs.get(f, "")) 
+                      if st.session_state.stored_inputs.get(f, "") in OPTIONS[f] else 0
+            )
+        else:
+            st.session_state.stored_inputs[f] = right.selectbox(
+                f"**{f}**",
+                OPTIONS[f],
+                index=OPTIONS[f].index(st.session_state.stored_inputs.get(f, "")) 
+                      if st.session_state.stored_inputs.get(f, "") in OPTIONS[f] else 0
+            )
+
+    st.markdown("---")
+
+    # ---- Predict button ----
+    if st.button("🔍 Predict", use_container_width=True):
+
+        X = pd.DataFrame([st.session_state.stored_inputs])[features].astype(str)
+        yhat = pipe.predict(X)[0]
+        proba = pipe.predict_proba(X)[0]
+
+        label = "🍄 EDIBLE" if yhat == 0 else "☠️ POISONOUS"
+        color = "green" if yhat == 0 else "red"
+
+        st.markdown(
+            f"""
+            <div style="
+                border-radius: 10px;
+                padding: 22px;
+                background-color: #222;
+                border-left: 10px solid {color};
+                margin-top:15px;
+            ">
+                <h2 style="color:white;">Prediction: {label}</h2>
+                <p style="color:white;">
+                    <b>Probabilities</b><br>
+                    Edible: {proba[0]:.3f} &nbsp;&nbsp;|&nbsp;&nbsp;
+                    Poisonous: {proba[1]:.3f}
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+# ---------------------------
+# PAGE 2 — EDA VISUALS
+# ---------------------------
+elif page == "EDA Visuals":
+    st.title("EDA Visualizations")
+
+    st.write("These visualizations come from the preprocessing notebook.")
+
+    img_folder = "figures"
+    for img in os.listdir(img_folder):
+        if img.endswith(".png"):
+            st.image(os.path.join(img_folder, img))
+            st.markdown("---")
+
+# ---------------------------
+# PAGE 3 — ABOUT PROJECT
+# ---------------------------
+else:
+    st.title("About the Project")
+
+    st.markdown("""
+    ### **ITEC 3040 — Final Project: Mushroom Classification**
+
+    **Goal:**  
+    Build a model to classify mushrooms from the UCI dataset as *edible* or *poisonous*  
+    using 21 categorical attributes.
+
+    **Project Highlights:**  
+    - Full dataset EDA  
+    - Missing value strategies  
+    - Interactive Streamlit classifier  
+    - Achieved **100% accuracy (KNN)**
+
+    **Group Members:**  
+    Mirza, Hashmat, Taha, Divine, Maxmillian
+    """)
 

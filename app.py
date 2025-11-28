@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import joblib
 import os
+import matplotlib.pyplot as plt
 
 # ---------------------------
 # PAGE CONFIG
@@ -48,7 +49,11 @@ OPTIONS = {
 # SIDEBAR NAVIGATION
 # ---------------------------
 st.sidebar.title("🍄 Navigation")
-page = st.sidebar.radio("Go to:", ["Classifier", "EDA Visuals", "About Project"])
+page = st.sidebar.radio(
+    "Go to:",
+    ["Classifier", "Model Comparison", "EDA Visuals", "About Project"]
+)
+
 
 # ---------------------------
 # PRESET SAMPLES
@@ -143,9 +148,65 @@ if page == "Classifier":
             """,
             unsafe_allow_html=True
         )
+# ---------------------------
+# PAGE 2 — MODEL COMPARISON
+# ---------------------------
+elif page == "Model Comparison":
+
+    st.title("📊 Model Comparison")
+
+    st.write("Below is the performance of the **3 models** you evaluated in the notebook.")
+
+    # Hardcoded table from your results
+    summary = pd.DataFrame([
+        ["KNN(k=5)",       1.000000, 0.000000, "S1"],
+        ["DecisionTree",   0.999754, 0.000739, "S1"],
+        ["CategoricalNB",  0.955106, 0.008363, "S1"],
+        ["KNN(k=5)",       1.000000, 0.000000, "S2"],
+        ["DecisionTree",   0.999754, 0.000739, "S2"],
+        ["CategoricalNB",  0.955072, 0.008237, "S2"],
+    ], columns=["Model", "Mean Accuracy", "Std", "Strategy"])
+
+    st.dataframe(summary, use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("🔎 Best Accuracy per Model (Visual Comparison)")
+
+    # Side-by-side layout
+    left_col, right_col = st.columns([1, 1])
+
+    # LEFT → Bar Chart
+    with left_col:
+        st.write("### 📈 Accuracy Bar Chart (Smaller Size)")
+
+        best = summary.groupby("Model")["Mean Accuracy"].max()
+
+        fig, ax = plt.subplots(figsize=(4, 3))  # smaller figure
+        ax.bar(best.index, best.values, color=["#2ecc71", "#3498db", "#e74c3c"])
+        ax.set_ylabel("Accuracy")
+        ax.set_ylim(0.9, 1.01)
+        ax.set_title("10-Fold CV Accuracy")
+        ax.tick_params(axis='x', rotation=20)
+
+        st.pyplot(fig)
+
+    # RIGHT → Explanation
+    with right_col:
+        st.write("### 📝 What This Means")
+        st.markdown("""
+        - **KNN (k=5)** achieved a perfect **1.00 accuracy** on both S1 and S2.  
+        - **Decision Tree** is extremely close (0.9997).  
+        - **Categorical Naive Bayes** performed well but noticeably lower (~0.955).  
+
+        **Conclusion:**  
+        KNN and Decision Tree are nearly identical in performance,  
+        but **KNN is chosen as the final model** due to perfect accuracy.
+        """)
+
+    st.markdown("---")
 
 # ---------------------------
-# PAGE 2 — EDA VISUALS
+# PAGE 3 — EDA VISUALS
 # ---------------------------
 elif page == "EDA Visuals":
     st.title("EDA Visualizations")
@@ -159,7 +220,7 @@ elif page == "EDA Visuals":
             st.markdown("---")
 
 # ---------------------------
-# PAGE 3 — ABOUT PROJECT
+# PAGE 4 — ABOUT PROJECT
 # ---------------------------
 else:
     st.title("About the Project")

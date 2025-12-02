@@ -1,7 +1,7 @@
-import streamlit as st
-import pandas as pd
-import joblib
 import os
+import joblib
+import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
 
 # ---------------------------
@@ -13,13 +13,20 @@ st.set_page_config(
     layout="wide"
 )
 
+# ---------------------------
 # Load model bundle
-bundle = joblib.load("mushroom_model.joblib")
-pipe = bundle["pipeline"]
-features = bundle["features"]
+# ---------------------------
+MODEL_PATH = "mushroom_model.joblib"
+try:
+    bundle = joblib.load(MODEL_PATH)
+    pipe = bundle["pipeline"]
+    features = bundle["features"]
+except Exception as e:
+    st.error(f"Failed to load model bundle at '{MODEL_PATH}': {e}")
+    st.stop()
 
 # ---------------------------
-# UCI ATTRIBUTE OPTIONS
+# UCI ATTRIBUTE OPTIONS (raw codes)
 # ---------------------------
 OPTIONS = {
     "cap-shape": ["b","c","x","f","k","s"],
@@ -46,14 +53,53 @@ OPTIONS = {
 }
 
 # ---------------------------
+# Human readable meanings (MEANINGS)
+# ---------------------------
+MEANINGS = {
+    "cap-shape": {"b":"bell", "c":"conical", "x":"convex", "f":"flat", "k":"knobbed", "s":"sunken"},
+    "cap-surface": {"f":"fibrous", "g":"grooves", "y":"scaly", "s":"smooth"},
+    "cap-color": {"n":"brown","b":"buff","c":"cinnamon","g":"gray","r":"green","p":"pink","u":"purple","e":"red","w":"white","y":"yellow"},
+    "bruises": {"t":"bruises","f":"no bruises"},
+    "odor": {"a":"almond","l":"anise","c":"creosote","y":"fishy","f":"foul","m":"musty","n":"none","p":"pungent","s":"spicy"},
+    "gill-attachment": {"a":"attached","d":"descending","f":"free","n":"notched"},
+    "gill-spacing": {"c":"close","w":"crowded","d":"distant"},
+    "gill-size": {"b":"broad","n":"narrow"},
+    "gill-color": {"k":"black","n":"brown","b":"buff","h":"chocolate","g":"gray","r":"green","o":"orange","p":"pink","u":"purple","e":"red","w":"white","y":"yellow"},
+    "stalk-shape": {"e":"enlarging","t":"tapering"},
+    "stalk-root": {"b":"bulbous","c":"club","u":"cup","e":"equal","z":"rhizomorphs","r":"rooted","?":"missing"},
+    "stalk-surface-above-ring": {"f":"fibrous","y":"scaly","k":"silky","s":"smooth"},
+    "stalk-surface-below-ring": {"f":"fibrous","y":"scaly","k":"silky","s":"smooth"},
+    "stalk-color-above-ring": {"n":"brown","b":"buff","c":"cinnamon","g":"gray","o":"orange","p":"pink","e":"red","w":"white","y":"yellow"},
+    "stalk-color-below-ring": {"n":"brown","b":"buff","c":"cinnamon","g":"gray","o":"orange","p":"pink","e":"red","w":"white","y":"yellow"},
+    "veil-color": {"n":"brown","o":"orange","w":"white","y":"yellow"},
+    "ring-number": {"n":"none","o":"one","t":"two"},
+    "ring-type": {"c":"cobwebby","e":"evanescent","f":"flaring","l":"large","n":"none","p":"pendant","s":"sheathing","z":"zone"},
+    "spore-print-color": {"k":"black","n":"brown","b":"buff","h":"chocolate","r":"green","o":"orange","u":"purple","w":"white","y":"yellow"},
+    "population": {"a":"abundant","c":"clustered","n":"numerous","s":"scattered","v":"several","y":"solitary"},
+    "habitat": {"g":"grasses","l":"leaves","m":"meadows","p":"paths","u":"urban","w":"woods","d":"waste"}
+}
+
+# ---------------------------
+# Helper to format options in selectbox while keeping original code as value
+# ---------------------------
+def option_formatter(feature, code):
+    return f"{code} — {MEANINGS.get(feature, {}).get(code, 'unknown')}"
+
+# ---------------------------
+# Helper to pretty-print sample
+# ---------------------------
+def pretty_sample(sample):
+    parts = []
+    for f, v in sample.items():
+        text = MEANINGS.get(f, {}).get(v, v)
+        parts.append(f"{f}: {v} ({text})")
+    return " • ".join(parts)
+
+# ---------------------------
 # SIDEBAR NAVIGATION
 # ---------------------------
 st.sidebar.title("🍄 Navigation")
-page = st.sidebar.radio(
-    "Go to:",
-    ["Classifier", "Model Comparison", "EDA Visuals", "About Project"]
-)
-
+page = st.sidebar.radio("Go to:", ["Classifier", "Model Comparison", "EDA Visuals", "About Project"])
 
 # ---------------------------
 # PRESET SAMPLES
@@ -69,9 +115,9 @@ EDIBLE_SAMPLE = {
 }
 
 POISON_SAMPLE = {
-    'cap-shape': 'x','cap-surface': 's','cap-color': 'n','bruises': 't',
-    'odor': 'f','gill-attachment': 'f','gill-spacing': 'c','gill-size': 'b',
-    'gill-color': 'n','stalk-shape': 'e','stalk-root': 'e',
+    'cap-shape': 'x','cap-surface': 's','cap-color': 'n','bruises': 'f',
+    'odor': 'p','gill-attachment': 'f','gill-spacing': 'c','gill-size': 'n',
+    'gill-color': 'k','stalk-shape': 'e','stalk-root': 'e',
     'stalk-surface-above-ring': 's','stalk-surface-below-ring': 's',
     'stalk-color-above-ring': 'w','stalk-color-below-ring': 'w',
     'veil-color': 'w','ring-number': 'o','ring-type': 'p',
@@ -79,55 +125,74 @@ POISON_SAMPLE = {
 }
 
 # ---------------------------
+# Initialize stored inputs
+# ---------------------------
+if "stored_inputs" not in st.session_state:
+    st.session_state.stored_inputs = {f: (OPTIONS[f][0] if f in OPTIONS else "") for f in features}
+
+# ---------------------------
 # PAGE 1 — CLASSIFIER UI
 # ---------------------------
 if page == "Classifier":
-
     st.title("🍄 Mushroom Edibility Classifier")
-    st.write("Enter mushroom attributes using **dropdowns**, or load an example.")
-
-    # ---- Sample buttons (must retain values after clicking Predict) ----
-    if "stored_inputs" not in st.session_state:
-        st.session_state.stored_inputs = {f: "" for f in features}
+    st.write("Select attributes (dropdowns show code — meaning). Load an example or set values and Predict.")
 
     colA, colB = st.columns([1, 1])
     if colA.button("Load Edible Example"):
         st.session_state.stored_inputs = EDIBLE_SAMPLE.copy()
+        st.success("Loaded edible example: " + pretty_sample(EDIBLE_SAMPLE))
     if colB.button("Load Poisonous Example"):
         st.session_state.stored_inputs = POISON_SAMPLE.copy()
+        st.success("Loaded poisonous example: " + pretty_sample(POISON_SAMPLE))
 
     st.markdown("---")
 
-    # ---- Two-column dropdown layout ----
+    # Two-column dropdown layout with human-readable labels
     left, right = st.columns(2)
-
     for idx, f in enumerate(features):
-        if idx % 2 == 0:
-            st.session_state.stored_inputs[f] = left.selectbox(
-                f"**{f}**",
-                OPTIONS[f],
-                index=OPTIONS[f].index(st.session_state.stored_inputs.get(f, "")) 
-                      if st.session_state.stored_inputs.get(f, "") in OPTIONS[f] else 0
-            )
-        else:
-            st.session_state.stored_inputs[f] = right.selectbox(
-                f"**{f}**",
-                OPTIONS[f],
-                index=OPTIONS[f].index(st.session_state.stored_inputs.get(f, "")) 
-                      if st.session_state.stored_inputs.get(f, "") in OPTIONS[f] else 0
-            )
+        opts = OPTIONS.get(f, [""])
+        target_col = left if idx % 2 == 0 else right
+
+        # determine default selection index
+        current_val = st.session_state.stored_inputs.get(f, "")
+        try:
+            idx0 = opts.index(current_val) if current_val in opts else 0
+        except ValueError:
+            idx0 = 0
+
+        # Use format_func to display readable text while returning the raw code
+        st.session_state.stored_inputs[f] = target_col.selectbox(
+            f"**{f}**",
+            opts,
+            index=idx0,
+            format_func=lambda code, feature=f: option_formatter(feature, code)
+        )
 
     st.markdown("---")
 
-    # ---- Predict button ----
     if st.button("🔍 Predict", use_container_width=True):
-
         X = pd.DataFrame([st.session_state.stored_inputs])[features].astype(str)
-        yhat = pipe.predict(X)[0]
-        proba = pipe.predict_proba(X)[0]
+        try:
+            yhat = pipe.predict(X)[0]
+        except Exception as e:
+            st.error(f"Prediction failed: {e}")
+            st.stop()
+
+        # Try predict_proba if available
+        proba = None
+        try:
+            proba = pipe.predict_proba(X)[0]
+        except Exception:
+            proba = None
 
         label = "🍄 EDIBLE" if yhat == 0 else "☠️ POISONOUS"
         color = "green" if yhat == 0 else "red"
+
+        probs_html = ""
+        if proba is not None:
+            probs_html = f"Edible: {proba[0]:.3f} &nbsp;&nbsp;|&nbsp;&nbsp; Poisonous: {proba[1]:.3f}"
+        else:
+            probs_html = "Probabilities unavailable for this model."
 
         st.markdown(
             f"""
@@ -141,23 +206,20 @@ if page == "Classifier":
                 <h2 style="color:white;">Prediction: {label}</h2>
                 <p style="color:white;">
                     <b>Probabilities</b><br>
-                    Edible: {proba[0]:.3f} &nbsp;&nbsp;|&nbsp;&nbsp;
-                    Poisonous: {proba[1]:.3f}
+                    {probs_html}
                 </p>
             </div>
             """,
             unsafe_allow_html=True
         )
+
 # ---------------------------
 # PAGE 2 — MODEL COMPARISON
 # ---------------------------
 elif page == "Model Comparison":
-
     st.title("📊 Model Comparison")
+    st.write("Below is the performance of the models evaluated in the notebook.")
 
-    st.write("Below is the performance of the **3 models** we evaluated in the notebook.")
-
-    # Hardcoded table from your results
     summary = pd.DataFrame([
         ["KNN(k=5)",       1.000000, 0.000000, "S1"],
         ["DecisionTree",   0.999754, 0.000739, "S1"],
@@ -172,35 +234,26 @@ elif page == "Model Comparison":
     st.markdown("---")
     st.subheader("🔎 Best Accuracy per Model (Visual Comparison)")
 
-    # Side-by-side layout
     left_col, right_col = st.columns([1, 1])
-
-    # LEFT → Bar Chart
     with left_col:
-        st.write("### 📈 Accuracy Bar Chart (Smaller Size)")
-
+        st.write("### 📈 Accuracy Bar Chart")
         best = summary.groupby("Model")["Mean Accuracy"].max()
-
-        fig, ax = plt.subplots(figsize=(4, 3))  # smaller figure
+        fig, ax = plt.subplots(figsize=(5, 3))
         ax.bar(best.index, best.values, color=["#2ecc71", "#3498db", "#e74c3c"])
         ax.set_ylabel("Accuracy")
         ax.set_ylim(0.9, 1.01)
         ax.set_title("10-Fold CV Accuracy")
         ax.tick_params(axis='x', rotation=20)
-
         st.pyplot(fig)
 
-    # RIGHT → Explanation
     with right_col:
-        st.write("### 📝 What This Means")
+        st.write("### 📝 Explanation")
         st.markdown("""
-        - **KNN (k=5)** achieved a perfect **1.00 accuracy** on both S1 and S2.  
+        - **KNN (k=5)** achieved perfect **1.00 accuracy** on both strategies.  
         - **Decision Tree** is extremely close (0.9997).  
-        - **Categorical Naive Bayes** performed well but noticeably lower (~0.955).  
+        - **Categorical Naive Bayes** performed well but lower (~0.955).  
 
-        **Conclusion:**  
-        KNN and Decision Tree are nearly identical in performance,  
-        but **KNN is chosen as the final model** due to perfect accuracy.
+        **Conclusion:** KNN and Decision Tree are effectively perfect on this dataset, with KNN chosen in our notebook as the final pipeline due to perfect CV accuracy.
         """)
 
     st.markdown("---")
@@ -210,13 +263,17 @@ elif page == "Model Comparison":
 # ---------------------------
 elif page == "EDA Visuals":
     st.title("EDA Visualizations")
-
-    st.write("These visualizations come from the preprocessing notebook.")
+    st.write("Visualizations generated during preprocessing and evaluation (from `figures/`).")
 
     img_folder = "figures"
-    for img in os.listdir(img_folder):
-        if img.endswith(".png"):
-            st.image(os.path.join(img_folder, img))
+    if not os.path.exists(img_folder):
+        st.warning(f"No figures folder found at '{img_folder}'. Run the notebook to generate visuals.")
+    else:
+        imgs = sorted([p for p in os.listdir(img_folder) if p.endswith(".png")])
+        if not imgs:
+            st.info("No PNG images found in the figures folder.")
+        for img in imgs:
+            st.image(os.path.join(img_folder, img), use_column_width=True)
             st.markdown("---")
 
 # ---------------------------
@@ -224,21 +281,18 @@ elif page == "EDA Visuals":
 # ---------------------------
 else:
     st.title("About the Project")
-
     st.markdown("""
     ### **ITEC 3040 — Final Project: Mushroom Classification**
 
     **Goal:**  
-    Build a model to classify mushrooms from the UCI dataset as *edible* or *poisonous*  
-    using 21 categorical attributes.
+    Build a model to classify mushrooms from the UCI dataset as *edible* or *poisonous* using categorical attributes.
 
     **Project Highlights:**  
     - Full dataset EDA  
     - Missing value strategies  
     - Interactive Streamlit classifier  
-    - Achieved **100% accuracy (KNN)**
+    - Model artifacts and visualizations saved under `figures/` and `app/`
 
     **Group Members:**  
-    Mirza, Hashmat, Taha, Divine, Maxmillian
+    Mirza Baig, Hashmat Jadoon, Taha Hashmi, Divine Consile Dikoka, Maximillian Dow
     """)
-
